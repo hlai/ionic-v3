@@ -1,6 +1,6 @@
 {
-  "private": true,
-  "name": "ionic2",
+  "private": false,
+  "name": "ionic3-angular6",
   "version": "3.9.2",
   "description": "A powerful framework for building mobile and progressive web apps with JavaScript and Angular",
   "keywords": [
@@ -138,6 +138,8 @@
     "vinyl": "1.2.0",
     "yargs": "5.0.0"
   },
+  "main": "umd/index.js",
+  "module": "index.js",
   "config": {
     "commitizen": {
       "path": "node_modules/ionic-cz-conventional-changelog"
