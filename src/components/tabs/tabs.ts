@@ -1,7 +1,9 @@
 import { AfterViewInit, Component, ElementRef, EventEmitter, Input, Optional, Output, Renderer, ViewChild, ViewContainerRef, ViewEncapsulation, forwardRef } from '@angular/core';
 
-import { Subject } from 'rxjs/Subject';
-import 'rxjs/add/operator/takeUntil';
+// import { Subject } from 'rxjs/Subject';
+// import 'rxjs/add/operator/takeUntil';
+import { Subject, pipe } from 'rxjs';
+import { takeUntil } from 'rxjs/operators';
 
 import { App } from '../app/app';
 import { Config } from '../../config/config';
@@ -277,14 +279,14 @@ export class Tabs extends Ion implements AfterViewInit, RootNode, ITabs, Navigat
 
     const keyboardResizes = config.getBoolean('keyboardResizes', false);
     if (keyboard && keyboardResizes) {
-      keyboard.willHide
-        .takeUntil(this._onDestroy)
-        .subscribe(() => {
+      keyboard.willHide.pipe(
+        takeUntil(this._onDestroy)
+      ).subscribe(() => {
           this._plt.timeout(() => this.setTabbarHidden(false), 50);
         });
-      keyboard.willShow
-        .takeUntil(this._onDestroy)
-        .subscribe(() => this.setTabbarHidden(true));
+      keyboard.willShow.pipe(
+         takeUntil(this._onDestroy)
+      ).subscribe(() => this.setTabbarHidden(true));
     }
   }
 
@@ -316,11 +318,11 @@ export class Tabs extends Ion implements AfterViewInit, RootNode, ITabs, Navigat
     this._setConfig('tabsLayout', 'icon-top');
     this._setConfig('tabsHighlight', this.tabsHighlight);
 
-    if (this.tabsHighlight) {
-      this._plt.resize
-        .takeUntil(this._onDestroy)
-        .subscribe(() => this._highlight.select(this.getSelected()));
-    }
+     if ( this.tabsHighlight ) {
+        this._plt.resize.pipe(
+           takeUntil( this._onDestroy )
+        ).subscribe( () => this._highlight.select( this.getSelected() ) );
+     }
 
     this.initTabs();
   }
