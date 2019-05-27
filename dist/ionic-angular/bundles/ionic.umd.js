@@ -31538,7 +31538,11 @@ var Config = /** @class */ (function () {
      */
     Config.prototype.getNumber = function (key, fallbackValue) {
         if (fallbackValue === void 0) { fallbackValue = NaN; }
-        var val = parseFloat(this.get(key));
+        return this.parseNumber(this.get(key), fallbackValue);
+    };
+    Config.prototype.parseNumber = function (value, fallbackValue) {
+        if (fallbackValue === void 0) { fallbackValue = NaN; }
+        var val = parseFloat(value);
         return isNaN(val) ? fallbackValue : val;
     };
     /**
@@ -31765,7 +31769,8 @@ var ViewController = /** @class */ (function () {
         this.data = (data instanceof NavParams ? data.data : (isPresent(data) ? data : {}));
         this._cssClass = rootCssClass;
         this._ts = Date.now();
-        window.addEventListener('orientationchange', this.handleOrientationChange.bind(this));
+        this._bindHandler = this.handleOrientationChange.bind(this);
+        window.addEventListener('orientationchange', this._bindHandler);
     }
     ViewController.prototype.handleOrientationChange = function () {
         if (this.getContent()) {
@@ -32145,7 +32150,7 @@ var ViewController = /** @class */ (function () {
                 renderer.setElementAttribute(cmpEle, 'class', null);
                 renderer.setElementAttribute(cmpEle, 'style', null);
             }
-            window.removeEventListener('orientationchange', this.handleOrientationChange.bind(this));
+            window.removeEventListener('orientationchange', this._bindHandler);
             // completely destroy this component. boom.
             this._cmp.destroy();
         }
@@ -38482,6 +38487,27 @@ var NavControllerBase = /** @class */ (function (_super) {
                 this._didLeave(leavingView);
             }
             this._cleanup(enteringView);
+            /**
+             * On iOS 12.2 there is a bug that
+             * causes scrolling to not
+             * be re-enabled unless there
+             * is some kind of CSS reflow triggered
+             */
+            var platform_1 = this.plt;
+            if (enteringView &&
+                enteringView.getIONContentRef &&
+                enteringView.getIONContentRef() &&
+                platform_1.is('ios')) {
+                platform_1.timeout(function () {
+                    platform_1.raf(function () {
+                        var content = enteringView.getIONContentRef().nativeElement;
+                        content.style.zIndex = '1';
+                        platform_1.raf(function () {
+                            content.style.zIndex = '';
+                        });
+                    });
+                }, 500);
+            }
         }
         else {
             // If transition does not complete, we have to cleanup anyway, because
@@ -39148,6 +39174,19 @@ var IonicApp = /** @class */ (function (_super) {
             clearTimeout(this._tmr);
             (void 0) /* console.debug */;
             this.setElementClass('disable-scroll', false);
+            /**
+             * On iOS 12.2 there is a bug that
+             * prevents pointer-events from being
+             * re-enabled when removing the
+             * disable-scroll class.
+             */
+            var plaform_1 = this._plt;
+            plaform_1.raf(function () {
+                _this.setElementStyle('z-index', '1');
+                plaform_1.raf(function () {
+                    _this.setElementStyle('z-index', null);
+                });
+            });
         }
     };
     IonicApp.prototype.stopScroll = function () {
@@ -50317,6 +50356,7 @@ var MAX_PICKER_SPEED = 60;
  */
 var PickerColumnCmp = /** @class */ (function () {
     function PickerColumnCmp(config, _plt, elementRef, _zone, _haptic, plt, domCtrl) {
+        this.config = config;
         this._plt = _plt;
         this.elementRef = elementRef;
         this._zone = _zone;
@@ -50326,8 +50366,6 @@ var PickerColumnCmp = /** @class */ (function () {
         this.startY = null;
         this.ionChange = new EventEmitter();
         this.events = new UIEventManager(plt);
-        this.rotateFactor = config.getNumber('pickerRotateFactor', 0);
-        this.scaleFactor = config.getNumber('pickerScaleFactor', 1);
         this.decelerateFunc = this.decelerate.bind(this);
         this.debouncer = domCtrl.debouncer();
     }
@@ -50346,6 +50384,19 @@ var PickerColumnCmp = /** @class */ (function () {
             capture: true,
             zone: false
         });
+        this.rotateFactor = this.config.getNumber('pickerRotateFactor', 0);
+        this.scaleFactor = this.config.getNumber('pickerScaleFactor', 1);
+        if (this.col.mode) {
+            var configMode = this.config.getModeConfig(this.col.mode);
+            var getRotateFactor = configMode.pickerRotateFactor;
+            var getScaleFactor = configMode.pickerScaleFactor;
+            if (getRotateFactor !== undefined) {
+                this.rotateFactor = this.config.parseNumber(getRotateFactor, this.rotateFactor);
+            }
+            if (getScaleFactor !== undefined) {
+                this.scaleFactor = this.config.parseNumber(getScaleFactor, this.scaleFactor);
+            }
+        }
     };
     PickerColumnCmp.prototype.ngOnDestroy = function () {
         this._plt.cancelRaf(this.rafId);
@@ -50679,7 +50730,7 @@ var PickerCmp = /** @class */ (function () {
         this._elementRef = _elementRef;
         this._gestureBlocker = gestureCtrl.createBlocker(BLOCK_ALL);
         this.d = params.data;
-        this.mode = config.get('mode');
+        this.mode = this.d.mode || config.get('mode');
         renderer.setElementClass(_elementRef.nativeElement, "picker-" + this.mode, true);
         if (this.d.cssClass) {
             this.d.cssClass.split(' ').forEach(function (cssClass) {
@@ -50690,6 +50741,7 @@ var PickerCmp = /** @class */ (function () {
         this.lastClick = 0;
     }
     PickerCmp.prototype.ionViewWillLoad = function () {
+        var _this = this;
         // normalize the data
         var data = this.d;
         data.buttons = data.buttons.map(function (button) {
@@ -50706,12 +50758,13 @@ var PickerCmp = /** @class */ (function () {
             if (!isPresent(column.options)) {
                 column.options = [];
             }
+            column.mode = _this.mode;
             column.selectedIndex = column.selectedIndex || 0;
             column.options = column.options.map(function (inputOpt) {
                 var opt = {
                     text: '',
                     value: '',
-                    disabled: inputOpt.disabled,
+                    disabled: inputOpt.disabled
                 };
                 if (isPresent(inputOpt)) {
                     if (isString(inputOpt) || isNumber(inputOpt)) {
@@ -70434,6 +70487,10 @@ var VirtualScroll = /** @class */ (function () {
      */
     VirtualScroll.prototype.scrollUpdate = function (ev) {
         var _this = this;
+        // ensure no empty are processed
+        if (!ev) {
+            return;
+        }
         // set the scroll top from the scroll event
         this._data.scrollTop = ev.scrollTop;
         // there is a queue system so that we can
